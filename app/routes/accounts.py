@@ -18,7 +18,7 @@ async def list_accounts(request):
         accounts = result.scalars().all()
 
     data = [
-        {"id": acc.id, "balance": float(acc.balance)}
+        {"id": acc.id, "balance": str(acc.balance)}
         for acc in accounts
     ]
     return json(data)

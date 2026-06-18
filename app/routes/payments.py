@@ -22,7 +22,7 @@ async def list_payments(request):
             "id": p.id,
             "transaction_id": p.transaction_id,
             "account_id": p.account_id,
-            "amount": float(p.amount),
+            "amount": str(p.amount),
         }
         for p in payments
     ]

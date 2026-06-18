@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from sqlalchemy import Numeric, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -11,7 +13,7 @@ class Payment(Base):
     transaction_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
 
     account: Mapped["Account"] = relationship("Account", back_populates="payments")
     user: Mapped["User"] = relationship("User", back_populates="payments")

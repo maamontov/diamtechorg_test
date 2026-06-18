@@ -44,7 +44,7 @@ async def list_users(request):
             "full_name": user.full_name,
             "is_admin": user.is_admin,
             "accounts": [
-                {"id": acc.id, "balance": float(acc.balance)}
+                {"id": acc.id, "balance": str(acc.balance)}
                 for acc in user.accounts
             ],
         })

@@ -1,8 +1,9 @@
 import hashlib
+from decimal import Decimal, InvalidOperation
 
 from sanic import Blueprint, json
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.exc import IntegrityError
 
 from app.db import async_session
 from app.models.account import Account
@@ -41,42 +42,53 @@ async def payment_webhook(request):
     transaction_id = body["transaction_id"]
     account_id = body["account_id"]
     user_id = body["user_id"]
-    amount = body["amount"]
+    try:
+        amount = Decimal(str(body["amount"]))
+    except InvalidOperation:
+        return json({"error": "Invalid amount"}, status=400)
+
+    if not amount.is_finite():
+        return json({"error": "Invalid amount"}, status=400)
 
     async with async_session() as session:
-        existing = await session.execute(
-            select(Payment).where(Payment.transaction_id == transaction_id)
-        )
-        if existing.scalar_one_or_none():
+        try:
+            async with session.begin():
+                existing = await session.execute(
+                    select(Payment).where(Payment.transaction_id == transaction_id)
+                )
+                if existing.scalar_one_or_none():
+                    return json({"error": "Transaction already processed"}, status=409)
+
+                result_user = await session.execute(
+                    select(User).where(User.id == user_id)
+                )
+                user = result_user.scalar_one_or_none()
+                if not user:
+                    return json({"error": "User not found"}, status=404)
+
+                result_acc = await session.execute(
+                    select(Account)
+                    .where(Account.id == account_id, Account.user_id == user_id)
+                    .with_for_update()
+                )
+                account = result_acc.scalar_one_or_none()
+
+                if not account:
+                    account = Account(user_id=user_id, balance=Decimal("0"))
+                    session.add(account)
+                    await session.flush()
+                    account_id = account.id
+
+                account.balance += amount
+
+                payment = Payment(
+                    transaction_id=transaction_id,
+                    account_id=account_id,
+                    user_id=user_id,
+                    amount=amount,
+                )
+                session.add(payment)
+        except IntegrityError:
             return json({"error": "Transaction already processed"}, status=409)
-
-        result_user = await session.execute(
-            select(User).where(User.id == user_id)
-        )
-        user = result_user.scalar_one_or_none()
-        if not user:
-            return json({"error": "User not found"}, status=404)
-
-        result_acc = await session.execute(
-            select(Account).where(Account.id == account_id, Account.user_id == user_id)
-        )
-        account = result_acc.scalar_one_or_none()
-
-        if not account:
-            account = Account(user_id=user_id, balance=0)
-            session.add(account)
-            await session.flush()
-            account_id = account.id
-
-        account.balance = float(account.balance) + float(amount)
-
-        payment = Payment(
-            transaction_id=transaction_id,
-            account_id=account_id,
-            user_id=user_id,
-            amount=amount,
-        )
-        session.add(payment)
-        await session.commit()
 
     return json({"status": "ok"}, status=200)
